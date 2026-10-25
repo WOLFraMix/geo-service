@@ -1,6 +1,7 @@
 package geo
 
 import (
+	"errors"
 	"fmt"
 	"math"
 	"time"
@@ -9,13 +10,21 @@ import (
 // City — сущность справочника.
 // Латиница в тегах json — как поле будет выглядеть в HTTP-ответах.
 type City struct {
-	ID        int64     `json:"id"`         // внутренний идентификатор
+	ID        uint64    `json:"id"`         // внутренний идентификатор
 	Name      string    `json:"name"`       // название, например "Астрахань"
 	Region    string    `json:"region"`     // регион/область
 	Country   string    `json:"country"`    // страна
 	Lat       float64   `json:"lat"`        // широта, градусы
 	Lon       float64   `json:"lon"`        // долгота, градусы
 	CreatedAt time.Time `json:"created_at"` // когда добавлен
+}
+
+// NearestCity — город + расстояние до точки поиска.
+// Встроенная структура geo.City: её поля «разворачиваются» внутрь
+// при JSON-сериализации, ответ будет плоским: {id, name, ..., distance_km}.
+type NearestCity struct {
+	City
+	DistanceKm float64 `json:"distance_km"`
 }
 
 // Пакетная константа: радиус Земли в километрах.
@@ -50,3 +59,28 @@ type NearestRequest struct {
 // Ошибка "город не найден" — её будут обрабатывать HTTP-хендлеры,
 // превращая в 404 (как ErrorDocument в watcher'е, но по HTTP-канонам).
 var ErrNotFound = fmt.Errorf("city not found")
+
+// CreateCityInput — то, что клиент присылает в POST /cities.
+// id и created_at клиент не задаёт — они генерируются на нашей стороне.
+type CreateCityInput struct {
+	Name    string  `json:"name"`
+	Region  string  `json:"region"`
+	Country string  `json:"country"`
+	Lat     float64 `json:"lat"`
+	Lon     float64 `json:"lon"`
+}
+
+// Validate — проверка входных данных. Возвращает первую найденную ошибку.
+func (in *CreateCityInput) Validate() error {
+	switch {
+	case in.Name == "":
+		return errors.New("name is required")
+	case in.Country == "":
+		return errors.New("country is required")
+	case in.Lat < -90 || in.Lat > 90:
+		return errors.New("lat must be -90..90")
+	case in.Lon < -180 || in.Lon > 180:
+		return errors.New("lon must be -180..180")
+	}
+	return nil
+}
