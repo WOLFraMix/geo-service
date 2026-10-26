@@ -1,0 +1,49 @@
+// cities.proto — контракт межсервисного общения.
+// protobuf описывает сообщения (данные) и сервисы (методы),
+// а protoc генерирует из него Go-код: структуры, сериализацию,
+// заглушки клиента и интерфейс сервера.
+syntax = "proto3";
+
+// Пакет-неймспейс для сообщений. Версия v1 — на случай эволюции контракта.
+package geoservice.v1;
+
+// Куда генерировать Go-код и как его называть:
+// путь "geo-service/internal/pb" — куда будет указывать import,
+// "pb" — имя пакета в сгенерированных файлах.
+option go_package = "geo-service/internal/pb;pb";
+
+// CityResolver — сервис, отвечающий на гео-вопросы о городах.
+// RPC = Remote Procedure Call: API вызывает метод так, будто это
+// обычная функция, а под капотом сериализация + HTTP/2 + сеть.
+service CityResolver {
+  rpc Nearest (NearestRequest) returns (NearestResponse);
+}
+
+// NearestRequest — параметры поиска. Числа после = — это НОМЕРА полей:
+// они не меняются никогда (по ним сообщения совместимы между версиями),
+// менять можно только типы/имена, и то осторожно.
+message NearestRequest {
+  double lat = 1;        // широта точки отсчёта
+  double lon = 2;        // долгота точки отсчёта
+  int32 limit = 3;       // сколько городов вернуть
+  double radius_km = 4;  // максимальный радиус; 0 = без ограничения
+}
+
+// NearestResponse — список городов с расстояниями.
+// repeated — это Go-слайс: []City.
+message NearestResponse {
+  repeated City cities = 1;
+}
+
+// City — плоская структура ответа.
+// uint64 для id — тот самый выбор из фазы 2, теперь он и в контракте.
+message City {
+  uint64 id = 1;
+  string name = 2;
+  string region = 3;
+  string country = 4;
+  double lat = 5;
+  double lon = 6;
+  string created_at = 7;  // RFC3339-строка: время в proto — отдельная наука
+  double distance_km = 8;
+}
