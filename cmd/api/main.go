@@ -6,6 +6,7 @@ import (
 	"net/http"
 
 	"geo-service/internal/config"
+	"geo-service/internal/grpcclient"
 	"geo-service/internal/httpapi"
 	"geo-service/internal/storage"
 )
@@ -31,8 +32,14 @@ func main() {
 	// 4. Роутер + регистрация ВСЕХ маршрутов в httpapi.New.
 	//    Временный smoke-test из фазы 2 удалён — его роль теперь
 	//    играет полноценный listCities с лимитом и валидацией.
+	res, err := grpcclient.New(cfg.GRPCAddr)
+	if err != nil {
+		log.Fatalf("connect to resolver: %v", err)
+	}
+	defer res.Close()
+
 	mux := http.NewServeMux()
-	httpapi.New(mux, store)
+	httpapi.New(mux, store, res)
 
 	// 5. Сервер с таймаутами
 	srv := &http.Server{

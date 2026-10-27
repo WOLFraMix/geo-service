@@ -14,6 +14,7 @@ type Config struct {
 	CHAddr     string        // адрес ClickHouse
 	CHPassword string        // пароль пользователя default
 	GRPCAddr   string        // адрес gRPC-резолвера (куда ходить API)
+	GRPCListen string        // где резолверу слушать: ":50051"
 }
 
 // New читает окружение и возвращает Config.
@@ -24,6 +25,7 @@ func New() Config {
 		CHAddr:     envOr("CH_ADDR", "clickhouse:9000"),
 		CHPassword: envOr("CH_PASSWORD", "dev123"), // дефолт совпадает с compose для локальной разработки
 		GRPCAddr:   envOr("GRPC_ADDR", "resolver:50051"),
+		GRPCListen: envOr("GRPC_LISTEN", ":50051"),
 	}
 
 	// Таймаут парсим через time.ParseDuration: "5s", "100ms" и т.п.

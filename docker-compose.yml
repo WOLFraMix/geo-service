@@ -1,20 +1,55 @@
 services:
   clickhouse:
-    image: clickhouse/clickhouse-server:26.10.2.103   # LTS-версия: стабильная
+    image: clickhouse/clickhouse-server:26.8.36.3   # LTS-версия: стабильная
     environment:
-      # CLICKHOUSE_PASSWORD задаёт пароль пользователю default.
       CLICKHOUSE_PASSWORD: "dev123"
     ports:
-      - "8123:8123"   # HTTP-интерфейс: веб-консоль, curl-запросы
-      - "9000:9000"   # NATIVE-протокол: именно его использует clickhouse-go
+      - "8123:8123"
+      - "9000:9000"
     volumes:
-      - clickhouse-data:/var/lib/clickhouse   # данные переживают пересоздание
-    # ClickHouse любит открытые файловые дескрипторы:
-    # дефолтного лимита Linux ему может не хватить, поднимаем явно
+      - clickhouse-data:/var/lib/clickhouse
     ulimits:
       nofile:
         soft: 262144
         hard: 262144
+    healthcheck:
+      # База считается «живой», когда ping проходит —
+      # зависимые сервисы стартуют только после этого
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://localhost:8123/ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  resolver:
+    build:
+      context: .
+      args:
+        TARGET: resolver          # какую точку входа собираем
+    environment:
+      CH_ADDR: "clickhouse:9000"  # теперь все имена — из docker-сети
+      CH_PASSWORD: "dev123"
+      GRPC_LISTEN: ":50051"
+    ports:
+      - "50051:50051"
+    depends_on:
+      clickhouse:
+        condition: service_healthy  # ждать не «запущен», а «здоров»
+
+  api:
+    build:
+      context: .
+      args:
+        TARGET: api
+    environment:
+      HTTP_ADDR: ":8080"
+      CH_ADDR: "clickhouse:9000"
+      CH_PASSWORD: "dev123"
+      GRPC_ADDR: "resolver:50051"   # DNS-имя сервиса в сети compose
+    ports:
+      - "8080:8080"
+    depends_on:
+      clickhouse:
+        condition: service_healthy
 
 volumes:
   clickhouse-data:

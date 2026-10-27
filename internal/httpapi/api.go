@@ -6,19 +6,24 @@ import (
 	"strconv"
 
 	"geo-service/internal/geo"
+	"geo-service/internal/grpcclient"
 	"geo-service/internal/storage"
+
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 )
 
 // API — держит зависимости хендлеров (store) и собирает маршруты.
 // Такой приём называется dependency injection: хендлеры не создают
 // соединение с базой сами, а получают его снаружи — легко тестировать.
 type API struct {
-	store *storage.Store
+	store    *storage.Store       // CRUD — напрямую в ClickHouse
+	resolver *grpcclient.Resolver // гео-поиск — через gRPC
 }
 
 // New создаёт API и регистрирует ВСЕ маршруты на переданном роутере.
-func New(mux *http.ServeMux, store *storage.Store) *API {
-	a := &API{store: store}
+func New(mux *http.ServeMux, store *storage.Store, res *grpcclient.Resolver) *API {
+	a := &API{store: store, resolver: res}
 
 	mux.HandleFunc("GET /healthz", a.health)
 	mux.HandleFunc("GET /cities", a.listCities)
@@ -145,8 +150,14 @@ func (a *API) nearestCities(w http.ResponseWriter, r *http.Request) {
 		radius = f
 	}
 
-	cities, err := a.store.Nearest(r.Context(), lat, lon, limit, radius)
+	cities, err := a.resolver.Nearest(r.Context(), lat, lon, limit, radius)
 	if err != nil {
+		// codes.Unavailable (резолвер недоступен) — это временная беда
+		// инфраструктуры, а не ошибка клиента: честный 503
+		if status.Code(err) == codes.Unavailable {
+			writeError(w, http.StatusServiceUnavailable, "resolver unavailable")
+			return
+		}
 		writeError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
