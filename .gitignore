@@ -1,5 +1,4 @@
 .vscode/
-go.sum
 *.exe
 *.dll
 *.so
