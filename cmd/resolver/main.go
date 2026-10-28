@@ -4,6 +4,9 @@ import (
 	"context"
 	"log"
 	"net"
+	"os"
+	"os/signal"
+	"syscall"
 
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/reflection" // позволяет grpcurl и Postman видеть методы сервиса
@@ -26,8 +29,9 @@ func main() {
 	}
 	log.Printf("clickhouse connected: %s", cfg.CHAddr)
 
-	// TCP-листенер: gRPC поверх HTTP/2, но в Go всё равно слушаем TCP
-	lis, err := net.Listen("tcp", ":50051")
+	// TCP-листенер: gRPC поверх HTTP/2,
+	// но в Go всё равно слушаем TCP
+	lis, err := net.Listen("tcp", cfg.GRPCListen)
 	if err != nil {
 		log.Fatalf("listen: %v", err)
 	}
@@ -39,6 +43,22 @@ func main() {
 	// Reflection: без него инструменты не смогут «опрашивать» сервис
 	reflection.Register(grpcSrv)
 
-	log.Printf("resolver listening on :50051")
-	log.Fatal(grpcSrv.Serve(lis)) // Serve блокируется до остановки
+	stop := make(chan os.Signal, 1)
+	signal.Notify(stop, syscall.SIGINT, syscall.SIGTERM)
+
+	go func() {
+		log.Printf("resolver listening on %s", cfg.GRPCListen)
+		if err := grpcSrv.Serve(lis); err != nil {
+			log.Fatalf("serve: %v", err)
+		}
+	}()
+
+	<-stop
+	log.Println("shutdown signal received")
+
+	// GracefulStop дорабатывает текущие RPC и лишь потом закрывает
+	// соединения — gRPC-версия той же вежливости
+	grpcSrv.GracefulStop()
+	store.Close()
+	log.Println("bye")
 }

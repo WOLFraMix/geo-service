@@ -222,3 +222,8 @@ func (s *Store) Nearest(ctx context.Context, lat, lon float64, limit int, radius
 	}
 	return out, rows.Err()
 }
+
+// Close закрывает соединение с ClickHouse.
+func (s *Store) Close() error {
+	return s.conn.Close()
+}
