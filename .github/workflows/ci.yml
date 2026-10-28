@@ -1,0 +1,33 @@
+name: CI
+
+# Когда запускать: при каждом push и pull request в main
+on:
+    push:
+        branches: [main]
+    pull_request:
+        branches: [main]
+
+jobs:
+    build:
+        runs-on: ubuntu-latest
+        steps:
+            # Шаги — это готовые кирпичики от GitHub и сообщества
+            - name: Checkout
+              uses: actions/checkout@v4
+
+            # Кэш модулей: зависимости не качаются заново при каждом запуске
+            - name: Setup Go
+              uses: actions/setup-go@v5
+              with:
+                  go-version-file: go.mod
+                  cache: true
+
+            - name: Build
+              run: go build -v ./...
+
+            - name: Vet
+              run: go vet ./...
+
+            # При появлении тестов — раскомментировать:
+            # - name: Test
+            #   run: go test -v ./...

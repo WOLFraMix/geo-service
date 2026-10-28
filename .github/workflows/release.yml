@@ -1,0 +1,47 @@
+name: Release
+
+# Запускать только при пуше тега вида v1.0.0
+on:
+    push:
+        tags: ["v*"]
+
+jobs:
+    release:
+        runs-on: ubuntu-latest
+        permissions:
+            contents: write # разрешение создавать релизы и грузить файлы
+
+        # Матрица — на уровне job: каждая строка include порождает
+        # ОТДЕЛЬНЫЙ раннер со своим набором matrix.*-переменных.
+        # Три строки = три параллельных сборки
+        strategy:
+            matrix:
+                include:
+                    - { goos: linux, goarch: amd64, ext: "" }
+                    - { goos: windows, goarch: amd64, ext: ".exe" }
+                    - { goos: darwin, goarch: arm64, ext: "" }
+
+        steps:
+            - uses: actions/checkout@v4
+
+            - uses: actions/setup-go@v5
+              with:
+                  go-version-file: go.mod
+                  cache: true
+
+            # А вот здесь матрицы уже нет — шаг просто знает свои
+            # matrix.goos / matrix.goarch из окружения этого раннера
+            - name: Build binaries
+              run: |
+                  mkdir -p dist
+                  for svc in api resolver; do
+                    CGO_ENABLED=0 GOOS=${{ matrix.goos }} GOARCH=${{ matrix.goarch }} \
+                      go build -trimpath -ldflags="-s -w" \
+                      -o dist/${svc}-${{ matrix.goos }}-${{ matrix.goarch }}${{ matrix.ext }} \
+                      ./cmd/${svc}
+                  done
+
+            - name: Create release
+              uses: softprops/action-gh-release@v2
+              with:
+                  files: dist/*
